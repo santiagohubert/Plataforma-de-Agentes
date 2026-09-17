@@ -1,4 +1,4 @@
-import { Agent, Conversation, Message, UsageStatus, UserConsentInput } from './types';
+import { Agent, Conversation, Message, UserConsentInput } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -14,7 +14,7 @@ class ApiClient {
     const response = await fetch(url, {
       ...options,
       headers,
-      credentials: 'include', // Para enviar/recibir cookies HttpOnly (sesión y anónimo)
+      credentials: 'include', // Para enviar cookies HttpOnly de sesión
     });
 
     if (!response.ok) {
@@ -34,9 +34,8 @@ class ApiClient {
   }
 
   async getCurrentConversation(): Promise<{
-    conversation: Conversation;
-    messageCount: number;
-    isAnonymous: boolean;
+    authenticated: boolean;
+    conversation: Conversation | null;
   }> {
     return this.request('/api/conversations/current');
   }
@@ -54,16 +53,6 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ content }),
     });
-  }
-
-  async resumeConversation(): Promise<{ conversation: Conversation }> {
-    return this.request('/api/conversations/resume', {
-      method: 'POST',
-    });
-  }
-
-  async getUsage(): Promise<UsageStatus> {
-    return this.request('/api/conversations/usage');
   }
 
   async saveConsent(consent: UserConsentInput): Promise<{ success: boolean }> {

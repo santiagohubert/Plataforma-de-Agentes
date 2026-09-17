@@ -7,7 +7,6 @@ import { api } from '@/lib/api';
 import { MessageBubble } from './MessageBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { ChatInput } from './ChatInput';
-import { LimitGateModal } from '../modals/LimitGateModal';
 import { AuthModal } from '../modals/AuthModal';
 import { useSession } from '@/lib/auth-client';
 
@@ -17,12 +16,7 @@ export const ChatContainer: React.FC = () => {
   const [agent, setAgent] = useState<Agent | null>(null);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [messageCount, setMessageCount] = useState<number>(0);
   const [isSending, setIsSending] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
-
-  // Modales
-  const [showLimitModal, setShowLimitModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -35,25 +29,34 @@ export const ChatContainer: React.FC = () => {
     scrollToBottom();
   }, [messages, isSending]);
 
-  // Carga inicial de agente y conversación
+  // Cargar datos de agente y conversación
   useEffect(() => {
     async function loadData() {
       try {
         const agentData = await api.getAgent('albio');
         setAgent(agentData);
 
-        const convData = await api.getCurrentConversation();
-        setConversation(convData.conversation);
-        setMessageCount(convData.messageCount);
-
-        if (convData.isAnonymous && convData.messageCount >= 3) {
-          setIsLocked(true);
-        }
-
-        if (convData.conversation.messages && convData.conversation.messages.length > 0) {
-          setMessages(convData.conversation.messages);
+        if (session?.user) {
+          // Usuario autenticado: cargar su conversación activa y todo su historial
+          const convData = await api.getCurrentConversation();
+          if (convData.conversation) {
+            setConversation(convData.conversation);
+            if (convData.conversation.messages && convData.conversation.messages.length > 0) {
+              setMessages(convData.conversation.messages);
+            } else {
+              setMessages([
+                {
+                  id: 'initial-greeting',
+                  role: 'ASSISTANT',
+                  content: agentData.greeting,
+                  createdAt: new Date().toISOString(),
+                },
+              ]);
+            }
+          }
         } else {
-          // Saludo inicial prefijado de ALBIO
+          // Usuario no autenticado: mostrar saludo de presentación de ALBIO
+          setConversation(null);
           setMessages([
             {
               id: 'initial-greeting',
@@ -64,20 +67,20 @@ export const ChatContainer: React.FC = () => {
           ]);
         }
       } catch (err) {
-        console.error('Error cargando datos iniciales:', err);
+        console.error('Error cargando datos:', err);
       }
     }
 
     loadData();
-  }, []);
+  }, [session?.user]);
 
   // Envío de mensaje
   const handleSend = async (text: string) => {
-    if (!text.trim() || isSending || isLocked) return;
+    if (!text.trim() || isSending) return;
 
-    // Si es anónimo y ya alcanzó el límite
-    if (!session?.user && messageCount >= 3) {
-      setShowLimitModal(true);
+    // Si no está autenticado, abrir modal de registro / login
+    if (!session?.user) {
+      setShowAuthModal(true);
       return;
     }
 
@@ -101,69 +104,40 @@ export const ChatContainer: React.FC = () => {
         response.userMessage,
         response.assistantMessage,
       ]);
-
-      setMessageCount(response.messageCount);
-
-      // Si llegó al límite tras este envío
-      if (!session?.user && response.messageCount >= 3) {
-        setIsLocked(true);
-      }
     } catch (err: any) {
       console.error('Error enviando mensaje:', err);
-
-      if (err.code === 'LIMIT_REACHED' || err.statusCode === 403) {
-        // Remover mensaje temporal fallido y mostrar modal
-        setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
-        setIsLocked(true);
-        setShowLimitModal(true);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `err-${Date.now()}`,
-            role: 'ASSISTANT',
-            content: 'Error al conectar con ALBIO. Por favor, probá de nuevo.',
-            createdAt: new Date().toISOString(),
-          },
-        ]);
-      }
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
+          role: 'ASSISTANT',
+          content: 'Error al conectar con ALBIO. Por favor, probá de nuevo.',
+          createdAt: new Date().toISOString(),
+        },
+      ]);
     } finally {
       setIsSending(false);
     }
   };
 
-  // Handler "Ahora no" del modal
-  const handleDismissLimit = () => {
-    setShowLimitModal(false);
-    setIsLocked(true);
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `now-not-${Date.now()}`,
-        role: 'ASSISTANT',
-        content: 'Cuando quierás retomar, este espacio sigue acá.',
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-  };
-
   // Handler tras registro o login exitoso
   const handleAuthSuccess = async () => {
     setShowAuthModal(false);
-    setShowLimitModal(false);
-    setIsLocked(false);
-
+    // Recargar conversación del usuario
     try {
-      const result = await api.resumeConversation();
-      if (result.conversation) {
-        setConversation(result.conversation);
-        setMessages(result.conversation.messages);
+      const convData = await api.getCurrentConversation();
+      if (convData.conversation) {
+        setConversation(convData.conversation);
+        if (convData.conversation.messages && convData.conversation.messages.length > 0) {
+          setMessages(convData.conversation.messages);
+        }
       }
     } catch (err) {
-      console.error('Error reanudando conversación:', err);
+      console.error('Error cargando conversación post-auth:', err);
     }
   };
+
+  const isLocked = !session?.user;
 
   return (
     <div className="chat-page">
@@ -190,17 +164,7 @@ export const ChatContainer: React.FC = () => {
         />
       </div>
 
-      {/* Modal Paywall / Límite de 3 mensajes */}
-      <LimitGateModal
-        isOpen={showLimitModal}
-        onRegister={() => {
-          setShowLimitModal(false);
-          setShowAuthModal(true);
-        }}
-        onDismiss={handleDismissLimit}
-      />
-
-      {/* Modal de Registro / Login con Consentimiento y Demografía */}
+      {/* Modal de Registro / Login */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
