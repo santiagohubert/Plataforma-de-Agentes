@@ -1,4 +1,4 @@
-import { Agent, Conversation, Message, UserConsentInput } from './types';
+import { Agent, Conversation, ConversationSummary, Project, Message, UserConsentInput } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -14,7 +14,7 @@ class ApiClient {
     const response = await fetch(url, {
       ...options,
       headers,
-      credentials: 'include', // Para enviar cookies HttpOnly de sesión
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -33,11 +33,43 @@ class ApiClient {
     return this.request<Agent>(`/api/agents/${slug}`);
   }
 
+  // Conversaciones
+  async listConversations(): Promise<{ conversations: ConversationSummary[] }> {
+    return this.request('/api/conversations');
+  }
+
   async getCurrentConversation(): Promise<{
     authenticated: boolean;
     conversation: Conversation | null;
   }> {
     return this.request('/api/conversations/current');
+  }
+
+  async getConversation(id: string): Promise<{ conversation: Conversation }> {
+    return this.request(`/api/conversations/${id}`);
+  }
+
+  async createConversation(params?: { projectId?: string | null; title?: string }): Promise<{ conversation: Conversation }> {
+    return this.request('/api/conversations', {
+      method: 'POST',
+      body: JSON.stringify(params || {}),
+    });
+  }
+
+  async updateConversation(
+    id: string,
+    data: { title?: string; projectId?: string | null }
+  ): Promise<{ conversation: Conversation }> {
+    return this.request(`/api/conversations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteConversation(id: string): Promise<{ success: boolean }> {
+    return this.request(`/api/conversations/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   async sendMessage(
@@ -47,6 +79,7 @@ class ApiClient {
     userMessage: Message;
     assistantMessage: Message;
     conversationId: string;
+    title?: string;
     messageCount: number;
   }> {
     return this.request(`/api/conversations/${conversationId}/messages`, {
@@ -55,6 +88,32 @@ class ApiClient {
     });
   }
 
+  // Proyectos
+  async listProjects(): Promise<{ projects: Project[] }> {
+    return this.request('/api/projects');
+  }
+
+  async createProject(name: string, description?: string): Promise<{ project: Project }> {
+    return this.request('/api/projects', {
+      method: 'POST',
+      body: JSON.stringify({ name, description }),
+    });
+  }
+
+  async updateProject(id: string, data: { name?: string; description?: string }): Promise<{ project: Project }> {
+    return this.request(`/api/projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteProject(id: string): Promise<{ success: boolean }> {
+    return this.request(`/api/projects/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Consentimiento
   async saveConsent(consent: UserConsentInput): Promise<{ success: boolean }> {
     return this.request('/api/consent', {
       method: 'POST',

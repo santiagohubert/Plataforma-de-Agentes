@@ -8,6 +8,7 @@ import { auth } from './modules/auth/auth.js';
 import { agentsRoutes } from './modules/agents/agents.routes.js';
 import { conversationsRoutes } from './modules/conversations/conversations.routes.js';
 import { consentRoutes } from './modules/consent/consent.routes.js';
+import { projectsRoutes } from './modules/projects/projects.routes.js';
 
 export function buildApp(): FastifyInstance {
   const app = Fastify({
@@ -20,7 +21,7 @@ export function buildApp(): FastifyInstance {
   app.register(cors, {
     origin: [env.FRONTEND_URL, 'http://localhost:3000'],
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
     exposedHeaders: ['Set-Cookie'],
   });
@@ -68,6 +69,7 @@ export function buildApp(): FastifyInstance {
   app.register(agentsRoutes, { prefix: '/api/agents' });
   app.register(conversationsRoutes, { prefix: '/api/conversations' });
   app.register(consentRoutes, { prefix: '/api/consent' });
+  app.register(projectsRoutes, { prefix: '/api/projects' });
 
   // Manejador centralizado de errores
   app.setErrorHandler((error, request, reply) => {

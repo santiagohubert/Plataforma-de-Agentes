@@ -10,8 +10,37 @@ import {
 
 export class ConversationsService {
   /**
-   * Obtiene la conversación activa actual del usuario autenticado o crea una nueva.
-   * Retorna todo el historial previo de mensajes sin perder nada.
+   * Lista todas las conversaciones activas del usuario autenticado.
+   */
+  async listConversations(userId: string) {
+    return await prisma.conversation.findMany({
+      where: {
+        userId,
+        active: true,
+      },
+      select: {
+        id: true,
+        title: true,
+        projectId: true,
+        agentId: true,
+        updatedAt: true,
+        startedAt: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        _count: {
+          select: { messages: true },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  /**
+   * Obtiene la conversación activa actual del usuario o crea una nueva si no tiene ninguna.
    */
   async getCurrentConversation(userId: string, agentSlug = 'albio') {
     const agent = await agentsService.getBySlug(agentSlug);
@@ -26,7 +55,9 @@ export class ConversationsService {
         messages: {
           orderBy: { createdAt: 'asc' },
         },
+        project: true,
       },
+      orderBy: { updatedAt: 'desc' },
     });
 
     if (!conv) {
@@ -41,6 +72,7 @@ export class ConversationsService {
           messages: {
             orderBy: { createdAt: 'asc' },
           },
+          project: true,
         },
       });
     }
@@ -49,13 +81,45 @@ export class ConversationsService {
   }
 
   /**
-   * Obtiene una conversación por ID validando que pertenezca al usuario autenticado.
+   * Crea una nueva conversación explícita (Nuevo Chat), opcionalmente dentro de un proyecto.
+   */
+  async createConversation(userId: string, params?: { projectId?: string | null; title?: string }) {
+    const agent = await agentsService.getBySlug('albio');
+
+    if (params?.projectId) {
+      const project = await prisma.project.findUnique({
+        where: { id: params.projectId },
+      });
+      if (!project || project.userId !== userId) {
+        throw new ForbiddenError('El proyecto especificado no es válido');
+      }
+    }
+
+    return await prisma.conversation.create({
+      data: {
+        userId,
+        agentId: agent.id,
+        projectId: params?.projectId || null,
+        title: params?.title || 'Nuevo chat',
+        source: 'web',
+        active: true,
+      },
+      include: {
+        messages: true,
+        project: true,
+      },
+    });
+  }
+
+  /**
+   * Obtiene una conversación por ID validando pertenencia del usuario.
    */
   async getConversationById(id: string, userId: string) {
     const conv = await prisma.conversation.findUnique({
       where: { id },
       include: {
         agent: true,
+        project: true,
         messages: {
           orderBy: { createdAt: 'asc' },
         },
@@ -74,7 +138,71 @@ export class ConversationsService {
   }
 
   /**
-   * Envía un mensaje en la conversación del usuario autenticado.
+   * Actualiza el título o mueve la conversación a otro proyecto (o a chat suelto).
+   */
+  async updateConversation(
+    userId: string,
+    conversationId: string,
+    data: { title?: string; projectId?: string | null }
+  ) {
+    const conv = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+
+    if (!conv) {
+      throw new NotFoundError('Conversación no encontrada');
+    }
+
+    if (conv.userId !== userId) {
+      throw new ForbiddenError('No tienes permiso para modificar esta conversación');
+    }
+
+    if (data.projectId) {
+      const project = await prisma.project.findUnique({
+        where: { id: data.projectId },
+      });
+      if (!project || project.userId !== userId) {
+        throw new ForbiddenError('Proyecto no válido');
+      }
+    }
+
+    return await prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
+        title: data.title !== undefined ? data.title.trim() : conv.title,
+        projectId: data.projectId !== undefined ? data.projectId : conv.projectId,
+      },
+      include: {
+        project: true,
+      },
+    });
+  }
+
+  /**
+   * Elimina una conversación y sus mensajes.
+   */
+  async deleteConversation(userId: string, conversationId: string) {
+    const conv = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+
+    if (!conv) {
+      throw new NotFoundError('Conversación no encontrada');
+    }
+
+    if (conv.userId !== userId) {
+      throw new ForbiddenError('No tienes permiso para eliminar esta conversación');
+    }
+
+    await prisma.conversation.delete({
+      where: { id: conversationId },
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * Envía un mensaje en la conversación y autotitula el chat si es el primer mensaje.
    */
   async sendMessage(params: {
     conversationId: string;
@@ -91,7 +219,12 @@ export class ConversationsService {
 
     const conv = await prisma.conversation.findUnique({
       where: { id: conversationId },
-      include: { agent: true },
+      include: {
+        agent: true,
+        _count: {
+          select: { messages: true },
+        },
+      },
     });
 
     if (!conv) {
@@ -111,7 +244,15 @@ export class ConversationsService {
       },
     });
 
-    // 2. Consultar proveedor de IA (Dify) directamente con el identificador del usuario
+    // 2. Autotitulado: si es el primer mensaje o el título es genérico, asignar título del mensaje
+    let newTitle = conv.title;
+    if (!newTitle || newTitle === 'Nuevo chat' || newTitle === 'Conversación') {
+      newTitle = trimmedContent.length > 35
+        ? trimmedContent.slice(0, 32) + '...'
+        : trimmedContent;
+    }
+
+    // 3. Consultar proveedor de IA (Dify)
     const aiProvider = getAIProvider();
     const aiResponse = await aiProvider.sendMessage({
       userIdentifier: userId,
@@ -119,7 +260,7 @@ export class ConversationsService {
       query: trimmedContent,
     });
 
-    // 3. Persistir respuesta del asistente
+    // 4. Persistir respuesta del asistente
     const assistantMessage = await prisma.message.create({
       data: {
         conversationId: conv.id,
@@ -128,24 +269,24 @@ export class ConversationsService {
       },
     });
 
-    // 4. Actualizar externalConversationId de Dify en la conversación
-    if (aiResponse.externalConversationId && aiResponse.externalConversationId !== conv.externalConversationId) {
-      await prisma.conversation.update({
-        where: { id: conv.id },
-        data: {
-          externalConversationId: aiResponse.externalConversationId,
-          updatedAt: new Date(),
-        },
-      });
-    }
+    // 5. Actualizar externalConversationId y título en la conversación
+    await prisma.conversation.update({
+      where: { id: conv.id },
+      data: {
+        title: newTitle,
+        externalConversationId: aiResponse.externalConversationId || conv.externalConversationId,
+        updatedAt: new Date(),
+      },
+    });
 
-    // 5. Registrar uso del usuario
+    // 6. Registrar uso del usuario
     const currentCount = await usageService.incrementUsage({ userId });
 
     return {
       userMessage,
       assistantMessage,
       conversationId: conv.id,
+      title: newTitle,
       externalConversationId: aiResponse.externalConversationId,
       messageCount: currentCount,
     };

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Loader2 } from 'lucide-react';
 import { Message, Conversation, Agent } from '@/lib/types';
 import { api } from '@/lib/api';
 import { MessageBubble } from './MessageBubble';
@@ -10,13 +10,26 @@ import { ChatInput } from './ChatInput';
 import { AuthModal } from '../modals/AuthModal';
 import { useSession } from '@/lib/auth-client';
 
-export const ChatContainer: React.FC = () => {
+interface ChatContainerProps {
+  conversationId?: string | null;
+  onConversationCreated?: (conv: Conversation) => void;
+  onTitleUpdated?: (convId: string, newTitle: string) => void;
+  onOpenAuth?: () => void;
+}
+
+export const ChatContainer: React.FC<ChatContainerProps> = ({
+  conversationId,
+  onConversationCreated,
+  onTitleUpdated,
+  onOpenAuth,
+}) => {
   const { data: session } = useSession();
 
   const [agent, setAgent] = useState<Agent | null>(null);
-  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [currentConv, setCurrentConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [isLoadingConv, setIsLoadingConv] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -29,50 +42,88 @@ export const ChatContainer: React.FC = () => {
     scrollToBottom();
   }, [messages, isSending]);
 
-  // Cargar datos de agente y conversación
+  // Cargar info del agente al montar
   useEffect(() => {
-    async function loadData() {
+    async function loadAgent() {
       try {
         const agentData = await api.getAgent('albio');
         setAgent(agentData);
+      } catch (err) {
+        console.error('Error cargando datos del agente:', err);
+      }
+    }
+    loadAgent();
+  }, []);
 
-        if (session?.user) {
-          // Usuario autenticado: cargar su conversación activa y todo su historial
-          const convData = await api.getCurrentConversation();
-          if (convData.conversation) {
-            setConversation(convData.conversation);
-            if (convData.conversation.messages && convData.conversation.messages.length > 0) {
-              setMessages(convData.conversation.messages);
-            } else {
-              setMessages([
-                {
-                  id: 'initial-greeting',
-                  role: 'ASSISTANT',
-                  content: agentData.greeting,
-                  createdAt: new Date().toISOString(),
-                },
-              ]);
-            }
-          }
+  // Cargar conversación cuando cambia conversationId o el estado de sesión
+  useEffect(() => {
+    if (!agent) return;
+
+    if (!session?.user) {
+      setCurrentConv(null);
+      setMessages([
+        {
+          id: 'initial-greeting',
+          role: 'ASSISTANT',
+          content: agent.greeting,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      return;
+    }
+
+    if (!conversationId) {
+      setCurrentConv(null);
+      setMessages([
+        {
+          id: 'initial-greeting',
+          role: 'ASSISTANT',
+          content: agent.greeting,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      return;
+    }
+
+    let isMounted = true;
+    async function fetchConversation() {
+      setIsLoadingConv(true);
+      try {
+        const data = await api.getConversation(conversationId!);
+        if (!isMounted) return;
+        setCurrentConv(data.conversation);
+        if (data.conversation.messages && data.conversation.messages.length > 0) {
+          setMessages(data.conversation.messages);
         } else {
-          // Usuario no autenticado: mostrar saludo de presentación de ALBIO
-          setConversation(null);
           setMessages([
             {
               id: 'initial-greeting',
               role: 'ASSISTANT',
-              content: agentData.greeting,
+              content: agent?.greeting || '¡Hola! ¿En qué puedo ayudarte hoy?',
               createdAt: new Date().toISOString(),
             },
           ]);
         }
       } catch (err) {
-        console.error('Error cargando datos:', err);
+        console.error('Error obteniendo conversación:', err);
+      } finally {
+        if (isMounted) setIsLoadingConv(false);
       }
     }
 
-    loadData();
-  }, [session?.user]);
+    fetchConversation();
+    return () => {
+      isMounted = false;
+    };
+  }, [conversationId, session?.user, agent]);
+
+  const handleOpenAuth = () => {
+    if (onOpenAuth) {
+      onOpenAuth();
+    } else {
+      setShowAuthModal(true);
+    }
+  };
 
   // Envío de mensaje
   const handleSend = async (text: string) => {
@@ -80,11 +131,11 @@ export const ChatContainer: React.FC = () => {
 
     // Si no está autenticado, abrir modal de registro / login
     if (!session?.user) {
-      setShowAuthModal(true);
+      handleOpenAuth();
       return;
     }
 
-    if (!conversation) return;
+    let targetConvId = conversationId;
 
     const tempUserMsg: Message = {
       id: `temp-${Date.now()}`,
@@ -97,13 +148,27 @@ export const ChatContainer: React.FC = () => {
     setIsSending(true);
 
     try {
-      const response = await api.sendMessage(conversation.id, text);
+      // Si aún no hay conversación activa, crear una
+      if (!targetConvId) {
+        const createRes = await api.createConversation();
+        targetConvId = createRes.conversation.id;
+        setCurrentConv(createRes.conversation);
+        if (onConversationCreated) {
+          onConversationCreated(createRes.conversation);
+        }
+      }
+
+      const response = await api.sendMessage(targetConvId, text);
 
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== tempUserMsg.id),
         response.userMessage,
         response.assistantMessage,
       ]);
+
+      if (response.title && onTitleUpdated) {
+        onTitleUpdated(targetConvId, response.title);
+      }
     } catch (err: any) {
       console.error('Error enviando mensaje:', err);
       setMessages((prev) => [
@@ -120,23 +185,6 @@ export const ChatContainer: React.FC = () => {
     }
   };
 
-  // Handler tras registro o login exitoso
-  const handleAuthSuccess = async () => {
-    setShowAuthModal(false);
-    // Recargar conversación del usuario
-    try {
-      const convData = await api.getCurrentConversation();
-      if (convData.conversation) {
-        setConversation(convData.conversation);
-        if (convData.conversation.messages && convData.conversation.messages.length > 0) {
-          setMessages(convData.conversation.messages);
-        }
-      }
-    } catch (err) {
-      console.error('Error cargando conversación post-auth:', err);
-    }
-  };
-
   const isLocked = !session?.user;
 
   return (
@@ -148,9 +196,14 @@ export const ChatContainer: React.FC = () => {
 
       <div className="chat-card">
         <div className="messages-container" id="messagesRepeater">
-          {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} />
-          ))}
+          {isLoadingConv ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '0.5rem', color: '#64748b' }}>
+              <Loader2 className="animate-spin" size={24} />
+              <span>Cargando conversación...</span>
+            </div>
+          ) : (
+            messages.map((m) => <MessageBubble key={m.id} message={m} />)
+          )}
 
           {isSending && <TypingIndicator />}
           <div ref={messagesEndRef} />
@@ -158,17 +211,20 @@ export const ChatContainer: React.FC = () => {
 
         <ChatInput
           onSend={handleSend}
-          disabled={isSending}
+          disabled={isSending || isLoadingConv}
           isLocked={isLocked}
-          onOpenRegister={() => setShowAuthModal(true)}
+          onOpenRegister={handleOpenAuth}
         />
       </div>
 
-      {/* Modal de Registro / Login */}
+      {/* Modal fallback */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
-        onSuccess={handleAuthSuccess}
+        onSuccess={() => {
+          setShowAuthModal(false);
+          window.location.reload();
+        }}
       />
     </div>
   );

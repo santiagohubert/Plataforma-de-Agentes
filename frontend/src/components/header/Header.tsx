@@ -19,19 +19,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenAuth }) => {
   return (
     <header className="header">
       <a href="/albio" className="header-brand">
-        <div className="header-logo-icon">
-          <div className="header-logo-icon-inner" />
-        </div>
-        <div>
-          <span className="header-brand-title">SENS</span>
-          <span className="header-brand-sub">Desarrollo Humano</span>
-        </div>
+        <img
+          src="/sens-logo.jpg"
+          alt="SENS Desarrollo Humano"
+          style={{ height: '44px', objectFit: 'contain' }}
+        />
       </a>
 
       <nav className="header-nav">
-        <a href="#quienes-somos" className="header-link">Quiénes somos</a>
-        <a href="#que-hacemos" className="header-link">Qué hacemos</a>
-        <a href="#contacto" className="header-link">Contacto</a>
         <a href="/albio" className="header-link active">ALBIO Beta</a>
 
         {session?.user ? (
