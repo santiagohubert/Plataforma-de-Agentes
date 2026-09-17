@@ -1,0 +1,173 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// MODELOS BETTER AUTH
+// ----------------------------------------------------
+
+model User {
+  id            String         @id
+  name          String
+  email         String         @unique
+  emailVerified Boolean        @default(false)
+  image         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  sessions      Session[]
+  accounts      Account[]
+
+  // Dominio ALBIO
+  consent       UserConsent?
+  usage         UserUsage?
+  conversations Conversation[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@map("accounts")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@map("verifications")
+}
+
+// ----------------------------------------------------
+// MODELOS DE DOMINIO ALBIO
+// ----------------------------------------------------
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum AgentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Agent {
+  id          String         @id @default(uuid())
+  slug        String         @unique // "albio"
+  name        String                 // "ALBIO"
+  description String?
+  greeting    String         @db.Text
+  provider    String         @default("dify")
+  status      AgentStatus    @default(ACTIVE)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  conversations Conversation[]
+
+  @@map("agents")
+}
+
+model Conversation {
+  id                     String      @id @default(uuid())
+  agentId                String
+  userId                 String?
+  anonymousSessionId     String?
+  externalConversationId String?     // conversation_id retornado por Dify
+  title                  String?
+  source                 String      @default("web")
+  active                 Boolean     @default(true)
+  startedAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
+
+  agent                  Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  user                   User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  messages               Message[]
+
+  @@index([userId])
+  @@index([anonymousSessionId])
+  @@index([agentId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String         @id @default(uuid())
+  conversationId String
+  role           MessageRole
+  content        String         @db.Text
+  createdAt      DateTime       @default(now())
+
+  conversation   Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+model UserConsent {
+  id         String    @id @default(uuid())
+  userId     String    @unique
+  acceptedAt DateTime  @default(now())
+  version    String    @default("1.0")
+  mailing    Boolean   @default(false)
+  country    String?
+  city       String?
+  birthYear  Int?
+  createdAt  DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_consents")
+}
+
+model UserUsage {
+  id                 String    @id @default(uuid())
+  userId             String?   @unique
+  anonymousSessionId String?   @unique
+  messageCount       Int       @default(0)
+  lastUsed           DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user               User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([anonymousSessionId])
+  @@map("user_usages")
+}

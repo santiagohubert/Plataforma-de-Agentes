@@ -1,0 +1,13 @@
+{
+  "name": "albio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ALBIO - Bioenergetics AI Agent Platform",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "test": "npm --prefix backend test",
+    "studio": "npm --prefix backend run prisma:studio"
+  }
+}
