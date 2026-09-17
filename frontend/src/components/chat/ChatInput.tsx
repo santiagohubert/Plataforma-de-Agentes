@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, KeyboardEvent } from 'react';
+import React, { useState, KeyboardEvent, useRef } from 'react';
 import { ChevronRight, Lock } from 'lucide-react';
 
 interface ChatInputProps {
@@ -17,18 +17,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onOpenRegister,
 }) => {
   const [text, setText] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = () => {
     if (!text.trim() || disabled || isLocked) return;
     onSend(text.trim());
     setText('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value);
+    const target = e.target;
+    target.style.height = 'auto';
+    target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
   };
 
   return (
@@ -39,23 +50,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           className="btn-locked-banner"
           id="btnLoginLater"
         >
-          <Lock size={18} />
+          <Lock size={16} />
           <span>Registrate para continuar con ALBIO ↓</span>
         </button>
       ) : null}
 
       <div className="chat-input-row">
-        <input
+        <textarea
+          ref={textareaRef}
           id="userInput"
-          type="text"
+          rows={1}
           className="chat-input-field"
           placeholder={
             isLocked
-              ? 'Registrate para continuar con ALBIO ↓'
+              ? 'Registrate para continuar con ALBIO...'
               : 'Preguntá lo que necesitás...'
           }
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={handleChange}
           onKeyDown={handleKeyDown}
           disabled={disabled || isLocked}
           autoComplete="off"
@@ -66,6 +78,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           onClick={handleSend}
           disabled={!text.trim() || disabled || isLocked}
           title="Enviar mensaje"
+          aria-label="Enviar mensaje"
         >
           <ChevronRight size={22} />
         </button>

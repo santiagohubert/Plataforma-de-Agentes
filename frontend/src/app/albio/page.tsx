@@ -15,8 +15,15 @@ export default function AlbioPage() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+
+  // Inicializar estado del sidebar según tamaño de pantalla
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsSidebarOpen(window.innerWidth >= 1024);
+    }
+  }, []);
 
   // Cargar lista de proyectos y conversaciones cuando el usuario está autenticado
   const refreshSidebarData = useCallback(async () => {
@@ -72,6 +79,11 @@ export default function AlbioPage() {
       const newConv = res.conversation;
       setConversations((prev) => [newConv, ...prev]);
       setActiveConversationId(newConv.id);
+
+      // Auto-cerrar sidebar en mobile al crear nuevo chat
+      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+        setIsSidebarOpen(false);
+      }
     } catch (err) {
       console.error('Error creando nueva conversación:', err);
     }
@@ -80,6 +92,10 @@ export default function AlbioPage() {
   // Manejador para seleccionar conversación
   const handleSelectConversation = (id: string) => {
     setActiveConversationId(id);
+    // Auto-cerrar sidebar en mobile al elegir chat
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setIsSidebarOpen(false);
+    }
   };
 
   // Manejador para crear nuevo proyecto
@@ -145,6 +161,7 @@ export default function AlbioPage() {
       );
     } catch (err) {
       console.error('Error moviendo conversación:', err);
+      alert('Error al asignar el proyecto. Por favor probá de nuevo.');
     }
   };
 
@@ -163,7 +180,11 @@ export default function AlbioPage() {
 
   return (
     <>
-      <Header onOpenAuth={() => setShowAuthModal(true)} />
+      <Header
+        onOpenAuth={() => setShowAuthModal(true)}
+        onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+        isSidebarOpen={isSidebarOpen}
+      />
 
       <div className="app-wrapper">
         <Sidebar
@@ -181,7 +202,7 @@ export default function AlbioPage() {
           onOpenAuth={() => setShowAuthModal(true)}
         />
 
-        <main style={{ flex: 1, height: '100%', maxHeight: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <main className="main-content">
           <ChatContainer
             conversationId={activeConversationId}
             onConversationCreated={handleConversationCreated}
