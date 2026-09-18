@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
-    "start": "next start -p 3000",
+    "start": "next start",
     "lint": "next lint"
   },
+
   "dependencies": {
     "better-auth": "^1.1.0",
     "lucide-react": "^0.439.0",
