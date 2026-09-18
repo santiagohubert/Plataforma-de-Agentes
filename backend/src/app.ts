@@ -15,11 +15,18 @@ export function buildApp(): FastifyInstance {
     logger: {
       level: env.NODE_ENV === 'development' ? 'info' : 'warn',
     },
+    trustProxy: true,
   });
+
+  // Normalizar orígenes permitidos (eliminar trailing slashes y admitir lista separada por comas)
+  const allowedOrigins = [
+    ...env.FRONTEND_URL.split(',').map((u) => u.trim().replace(/\/$/, '')),
+    'http://localhost:3000',
+  ].filter(Boolean);
 
   // Plugins esenciales
   app.register(cors, {
-    origin: [env.FRONTEND_URL, 'http://localhost:3000'],
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
@@ -28,7 +35,14 @@ export function buildApp(): FastifyInstance {
 
   app.register(cookie);
 
-  // Endpoint de salud
+  // Endpoint de salud mínimo para Railway / orquestadores
+  app.get('/health', async () => {
+    return {
+      status: 'ok',
+    };
+  });
+
+  // Endpoint de salud detallado existente
   app.get('/api/health', async () => {
     return {
       status: 'ok',
@@ -39,8 +53,8 @@ export function buildApp(): FastifyInstance {
 
   // Manejador de Better Auth
   app.all('/api/auth/*', async (request, reply) => {
-    const protocol = request.protocol || 'http';
-    const host = request.headers.host || 'localhost:4000';
+    const protocol = (request.headers['x-forwarded-proto'] as string) || request.protocol || 'http';
+    const host = (request.headers['x-forwarded-host'] as string) || request.headers.host || 'localhost:4000';
     const url = new URL(request.url, `${protocol}://${host}`);
 
     const req = new Request(url.toString(), {
@@ -58,6 +72,7 @@ export function buildApp(): FastifyInstance {
 
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
+
       const json = await res.json();
       return reply.send(json);
     }
