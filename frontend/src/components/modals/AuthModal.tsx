@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { signIn, signUp } from '@/lib/auth-client';
 import { api } from '@/lib/api';
+import { ConsentModal } from './ConsentModal';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [birthYear, setBirthYear] = useState('');
   const [consent, setConsent] = useState(false);
   const [mailing, setMailing] = useState(true);
+  const [isConsentModalOpen, setIsConsentModalOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -39,7 +41,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       if (mode === 'register') {
         if (!consent) {
-          setError('Debes aceptar las condiciones de uso para continuar.');
+          setError('Debés aceptar el Consentimiento Informado para continuar.');
           setLoading(false);
           return;
         }
@@ -58,13 +60,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         try {
           await api.saveConsent({
+            acceptedConsent: true,
+            version: '1.0',
             mailing,
             country,
             city,
             birthYear: birthYear ? parseInt(birthYear, 10) : undefined,
           });
-        } catch (consentErr) {
+        } catch (consentErr: any) {
           console.error('Error guardando consentimiento:', consentErr);
+          setError(consentErr.message || 'Error al guardar el consentimiento informado.');
+          setLoading(false);
+          return;
         }
 
         onSuccess();
@@ -91,174 +98,199 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="modal-overlay" id="registroBox">
-      <div className="modal-card">
-        <button
-          onClick={onClose}
-          className="modal-close-btn"
-          title="Cerrar"
-        >
-          <X size={20} />
-        </button>
+    <>
+      <div className="modal-overlay" id="registroBox">
+        <div className="modal-card">
+          <button
+            onClick={onClose}
+            className="modal-close-btn"
+            title="Cerrar"
+          >
+            <X size={20} />
+          </button>
 
-        <h3 className="modal-title">
-          {mode === 'register' ? 'Creá tu cuenta en SENS' : 'Iniciar Sesión'}
-        </h3>
-        <p className="modal-desc">
-          {mode === 'register'
-            ? 'Antes de arrancar, te contamos cómo funciona esto: ALBIO es tu interlocutor de bioenergética.'
-            : 'Accedé con tus credenciales para continuar tu espacio.'}
-        </p>
+          <h3 className="modal-title">
+            {mode === 'register' ? 'Creá tu cuenta en SENS' : 'Iniciar Sesión'}
+          </h3>
+          <p className="modal-desc">
+            {mode === 'register'
+              ? 'Antes de arrancar, te contamos cómo funciona esto: ALBIO es tu interlocutor de bioenergética.'
+              : 'Accedé con tus credenciales para continuar tu espacio.'}
+          </p>
 
-        {error && (
-          <div style={{
-            padding: '0.75rem',
-            background: '#fee2e2',
-            color: '#b91c1c',
-            borderRadius: '6px',
-            fontSize: '0.85rem',
-            marginBottom: '1rem'
-          }}>
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit}>
-          {mode === 'register' && (
-            <div className="form-group">
-              <label className="form-label">Nombre</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Tu nombre"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
+          {error && (
+            <div style={{
+              padding: '0.75rem',
+              background: '#fee2e2',
+              color: '#b91c1c',
+              borderRadius: '6px',
+              fontSize: '0.85rem',
+              marginBottom: '1rem'
+            }}>
+              {error}
             </div>
           )}
 
-          <div className="form-group">
-            <label className="form-label">Email</label>
-            <input
-              type="email"
-              className="form-input"
-              placeholder="tu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Contraseña</label>
-            <input
-              type="password"
-              className="form-input"
-              placeholder="Mínimo 8 caracteres"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          {mode === 'register' && (
-            <>
-              <div className="form-row-3 form-group">
-                <div>
-                  <label className="form-label">País</label>
-                  <select
-                    id="countryDropdown"
-                    className="form-select"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                  >
-                    <option value="Argentina">Argentina</option>
-                    <option value="Uruguay">Uruguay</option>
-                    <option value="Chile">Chile</option>
-                    <option value="España">España</option>
-                    <option value="México">México</option>
-                    <option value="Colombia">Colombia</option>
-                    <option value="Otro">Otro</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="form-label">Año Nac.</label>
-                  <input
-                    id="birthYearInput"
-                    type="number"
-                    className="form-input"
-                    placeholder="1990"
-                    min="1920"
-                    max="2020"
-                    value={birthYear}
-                    onChange={(e) => setBirthYear(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label">Ciudad</label>
-                  <input
-                    id="cityInput"
-                    type="text"
-                    className="form-input"
-                    placeholder="Tu ciudad"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                  />
-                </div>
+          <form onSubmit={handleSubmit}>
+            {mode === 'register' && (
+              <div className="form-group">
+                <label className="form-label">Nombre</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Tu nombre"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
               </div>
+            )}
 
-              <label className="checkbox-row">
-                <input
-                  id="chkConsent"
-                  type="checkbox"
-                  checked={consent}
-                  onChange={(e) => setConsent(e.target.checked)}
-                />
-                <span>Leí y acepto las condiciones de uso de SENS</span>
-              </label>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input
+                type="email"
+                className="form-input"
+                placeholder="tu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
 
-              <label className="checkbox-row">
-                <input
-                  id="chkMailing"
-                  type="checkbox"
-                  checked={mailing}
-                  onChange={(e) => setMailing(e.target.checked)}
-                />
-                <span>Sí, quiero recibir novedades de SENS</span>
-              </label>
-            </>
-          )}
+            <div className="form-group">
+              <label className="form-label">Contraseña</label>
+              <input
+                type="password"
+                className="form-input"
+                placeholder="Mínimo 8 caracteres"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
 
-          <button
-            id="btnCrearCuenta"
-            type="submit"
-            className="btn-primary"
-            disabled={loading || (mode === 'register' && !consent)}
-          >
-            {loading
-              ? 'Procesando...'
-              : mode === 'register'
-              ? 'Crear Cuenta'
-              : 'Iniciar Sesión'}
-          </button>
+            {mode === 'register' && (
+              <>
+                <div className="form-row-3 form-group">
+                  <div>
+                    <label className="form-label">País</label>
+                    <select
+                      id="countryDropdown"
+                      className="form-select"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                    >
+                      <option value="Argentina">Argentina</option>
+                      <option value="Uruguay">Uruguay</option>
+                      <option value="Chile">Chile</option>
+                      <option value="España">España</option>
+                      <option value="México">México</option>
+                      <option value="Colombia">Colombia</option>
+                      <option value="Otro">Otro</option>
+                    </select>
+                  </div>
 
-          <button
-            type="button"
-            className="btn-secondary-text"
-            onClick={() => {
-              setMode(mode === 'register' ? 'login' : 'register');
-              setError(null);
-            }}
-          >
-            {mode === 'register'
-              ? '¿Ya tenés cuenta? Iniciar sesión'
-              : '¿No tenés cuenta? Creá tu cuenta gratis'}
-          </button>
-        </form>
+                  <div>
+                    <label className="form-label">Año Nac.</label>
+                    <input
+                      id="birthYearInput"
+                      type="number"
+                      className="form-input"
+                      placeholder="1990"
+                      min="1920"
+                      max="2020"
+                      value={birthYear}
+                      onChange={(e) => setBirthYear(e.target.value)}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="form-label">Ciudad</label>
+                    <input
+                      id="cityInput"
+                      type="text"
+                      className="form-input"
+                      placeholder="Tu ciudad"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="checkbox-row" style={{ alignItems: 'flex-start', cursor: 'default' }}>
+                  <input
+                    id="chkConsent"
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(e) => setConsent(e.target.checked)}
+                    style={{ marginTop: '0.2rem', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: '0.88rem', color: 'var(--text-main)', lineHeight: 1.4 }}>
+                    Leí y acepto el{' '}
+                    <button
+                      type="button"
+                      id="linkConsentModal"
+                      className="consent-open-link"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsConsentModalOpen(true);
+                      }}
+                    >
+                      Consentimiento Informado para el uso de ALBIO
+                    </button>
+                    .
+                  </span>
+                </div>
+
+                <label className="checkbox-row">
+                  <input
+                    id="chkMailing"
+                    type="checkbox"
+                    checked={mailing}
+                    onChange={(e) => setMailing(e.target.checked)}
+                  />
+                  <span>Sí, quiero recibir novedades de SENS</span>
+                </label>
+              </>
+            )}
+
+            <button
+              id="btnCrearCuenta"
+              type="submit"
+              className="btn-primary"
+              disabled={loading || (mode === 'register' && !consent)}
+            >
+              {loading
+                ? 'Procesando...'
+                : mode === 'register'
+                ? 'Crear Cuenta'
+                : 'Iniciar Sesión'}
+            </button>
+
+            <button
+              type="button"
+              className="btn-secondary-text"
+              onClick={() => {
+                setMode(mode === 'register' ? 'login' : 'register');
+                setError(null);
+              }}
+            >
+              {mode === 'register'
+                ? '¿Ya tenés cuenta? Iniciar sesión'
+                : '¿No tenés cuenta? Creá tu cuenta gratis'}
+            </button>
+          </form>
+        </div>
       </div>
-    </div>
+
+      {/* Modal de Lectura del Consentimiento Informado */}
+      <ConsentModal
+        isOpen={isConsentModalOpen}
+        onClose={() => setIsConsentModalOpen(false)}
+      />
+    </>
   );
 };
+

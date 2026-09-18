@@ -1,4 +1,5 @@
 import { prisma } from '../../infrastructure/database/prisma.js';
+import { CURRENT_CONSENT_VERSION } from './consent.constants.js';
 
 export interface SaveConsentInput {
   userId: string;
@@ -11,11 +12,14 @@ export interface SaveConsentInput {
 
 export class ConsentService {
   async saveConsent(input: SaveConsentInput) {
+    // La versión vigente es fijada por el backend, no por el cliente
+    const versionToUse = CURRENT_CONSENT_VERSION;
+
     return await prisma.userConsent.upsert({
       where: { userId: input.userId },
       update: {
         acceptedAt: new Date(),
-        version: input.version || '1.0',
+        version: versionToUse,
         mailing: input.mailing ?? false,
         country: input.country,
         city: input.city,
@@ -24,7 +28,7 @@ export class ConsentService {
       create: {
         userId: input.userId,
         acceptedAt: new Date(),
-        version: input.version || '1.0',
+        version: versionToUse,
         mailing: input.mailing ?? false,
         country: input.country,
         city: input.city,
@@ -41,3 +45,4 @@ export class ConsentService {
 }
 
 export const consentService = new ConsentService();
+

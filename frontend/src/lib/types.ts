@@ -49,8 +49,11 @@ export interface Agent {
 }
 
 export interface UserConsentInput {
+  acceptedConsent?: boolean;
   mailing?: boolean;
   country?: string;
   city?: string;
   birthYear?: number;
+  version?: string;
 }
+
