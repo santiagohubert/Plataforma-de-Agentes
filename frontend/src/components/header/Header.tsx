@@ -1,17 +1,19 @@
 'use client';
 
 import React from 'react';
-import { User as UserIcon, LogOut, Menu } from 'lucide-react';
+import { User as UserIcon, LogOut, Menu, BookOpen } from 'lucide-react';
 import { useSession, signOut } from '@/lib/auth-client';
 
 interface HeaderProps {
   onOpenAuth: () => void;
+  onOpenLibrary?: () => void;
   onToggleSidebar?: () => void;
   isSidebarOpen?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenAuth,
+  onOpenLibrary,
   onToggleSidebar,
   isSidebarOpen,
 }) => {
@@ -52,9 +54,8 @@ export const Header: React.FC<HeaderProps> = ({
             />
           </a>
 
-          {/* SENS / ALBIO en mobile */}
+          {/* SENS ALBIO en mobile */}
           <div className="header-mobile-brand">
-            <span className="header-brand-sep">/</span>
             <span className="header-brand-albio">ALBIO</span>
           </div>
         </div>
@@ -65,6 +66,21 @@ export const Header: React.FC<HeaderProps> = ({
         <a href="/albio" className="header-link active header-albio-tag">
           ALBIO Beta
         </a>
+
+        {/* Botón de acceso al ÍNDICE / BIBLIOTECA */}
+        {onOpenLibrary && (
+          <button
+            type="button"
+            onClick={onOpenLibrary}
+            className="btn-header-index"
+            title="Índice y biblioteca de recursos bioenergéticos"
+            aria-label="Abrir Índice de Biblioteca"
+            id="btnHeaderIndex"
+          >
+            <BookOpen size={16} className="btn-header-index-icon" />
+            <span className="btn-header-index-text">ÍNDICE</span>
+          </button>
+        )}
 
         {session?.user ? (
           <div className="header-user-section">

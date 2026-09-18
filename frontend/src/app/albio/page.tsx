@@ -5,6 +5,7 @@ import { Header } from '@/components/header/Header';
 import { ChatContainer } from '@/components/chat/ChatContainer';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { AuthModal } from '@/components/modals/AuthModal';
+import { LibraryModal } from '@/components/library/LibraryModal';
 import { useSession } from '@/lib/auth-client';
 import { api } from '@/lib/api';
 import { ConversationSummary, Project, Conversation } from '@/lib/types';
@@ -17,6 +18,7 @@ export default function AlbioPage() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
 
   // Inicializar estado del sidebar según tamaño de pantalla
   useEffect(() => {
@@ -182,6 +184,7 @@ export default function AlbioPage() {
     <>
       <Header
         onOpenAuth={() => setShowAuthModal(true)}
+        onOpenLibrary={() => setIsLibraryOpen(true)}
         onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
         isSidebarOpen={isSidebarOpen}
       />
@@ -219,6 +222,11 @@ export default function AlbioPage() {
           setShowAuthModal(false);
           refreshSidebarData();
         }}
+      />
+
+      <LibraryModal
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
       />
     </>
   );
